@@ -1,0 +1,65 @@
+!Global Configuration
+!
+radius server ISE1
+ address ipv4 10.0.100.21 auth-port 1812 acct-port 1813
+ key Cisco123
+!
+radius server ISE2
+ address ipv4 10.0.100.22 auth-port 1812 acct-port 1813
+ key Cisco123
+!
+aaa group server radius dot1x_auth
+ server name ISE1
+ server name ISE2
+!
+aaa authentication dot1x default group dot1x_auth
+aaa authorization network default group dot1x_auth 
+aaa accounting update newinfo
+aaa accounting dot1x default start-stop group dot1x_auth
+!
+aaa server radius dynamic-author
+ client 10.0.100.21 server-key Cisco123
+ client 10.0.100.22 server-key Cisco123
+!
+dot1x system-auth-control
+dot1x critical eapol
+!
+ip access-list extended PREAUTH
+ permit udp any eq bootpc any eq bootps
+ permit udp any any eq domain
+ permit icmp any any
+ permit udp any any eq tftp
+ deny   ip any any log
+!
+ip device tracking probe delay 10
+mab request format attribute 32 vlan access-vlan
+!
+radius-server attribute 6 on-for-login-auth
+radius-server attribute 6 support-multiple
+radius-server attribute 8 include-in-access-req
+radius-server attribute 25 access-request include
+radius-server attribute 31 mac format ietf upper-case
+radius-server attribute 31 send nas-port-detail
+radius-server dead-criteria tries 2
+radius-server key Cisco123
+radius-server vsa send authentication
+radius-server vsa send accounting
+!
+!
+!Interface Configuration
+!
+ authentication event fail action next-method
+ authentication event server dead action authorize vlan 100
+ authentication event server dead action authorize voice
+ authentication event server alive action reinitialize 
+ authentication host-mode multi-domain
+ authentication order mab dot1x
+ authentication priority dot1x mab
+ authentication port-control auto
+ authentication periodic
+ authentication timer reauthenticate server
+ authentication violation restrict
+ mab
+ dot1x pae authenticator
+ dot1x timeout tx-period 3
+!
