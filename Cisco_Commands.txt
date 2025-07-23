@@ -1,0 +1,301 @@
+Cisco commands 
+Earlier this year I indicated I would be making a VLAN tutorial. I think the purpose should be to bridge the gap from what the average IT person who probably focuses predominantly in an area of study other than network knows about VLANs to what a true network professional knows about VLANs.
+
+First let's start off with what virtually every candidate I interviewed for a network administration position I had posted said... Basically, they rattled off the definition of a VLAN as a "Virtual Local Area Network" and described it as "like a private network." I found it interesting they ultimately gave the same answer they did when asked what a subnet is and how it works. To me this indicated the vast majority of folks were keyword interviewees, and they had little or no actual experience working with them and the many possible use cases.
+
+You see, everyone pretty much knows that if you take a given network switch and divide its ports into different VLANs the traffic in each VLAN is isolated from the traffic in another VLAN... that essentially the device acts as if it were separate devices. Take a Cisco, Brocade, ProCurve etc. 48 port switch and put the first 24 ports into one VLAN and the next 24 into another VLAN and for all intents and purposes as far as most folks are concerned it behaves like two (2) logical 24-port switches. That is the extent of knowledge most IT folks have, and it is not to be condescending to them but because they predominantly focus in another area of study.
+
+**************************
+
+With VLANs there are a ton of Terms that get thrown around, but they are not all well understood, and to make matters worse, different vendors use different terminology for the same thing, and achieve identical configuration parameters using completely different configuration methodologies even though their CLI Language is virtually identical! An example of one of the most confusing concepts for example is that of a default VLAN vs a native VLAN.
+
+For example, in the Cisco world, you ultimately configure the VLAN membership(s) on a particular interface. In the Brocade, ProCruve etc. it is the reverse where you make interfaces a member of particular VLAN... it achieves the same configurations but with a different methodology.
+
+Either way it is critical that people know how VLANs work AND the terminology as well or they end up with crazy problems they created such as this gentleman I helped out:
+http://community.brocade.com/t5/Eth...s/two-ports-on-same-vlan-wont-talk/td-p/90184
+
+My response was here:
+http://community.brocade.com/t5/Eth...orts-on-same-vlan-wont-talk/td-p/90184/page/2
+
+
+*************
+First let's talk about the OSI Model:
+
+Most of my job is dealing with the lower four layers.
+
+1. Physical <== Everyone says this is the wiring. It is and more such as the media types like 10BaseT, 1000-BaseT, 1000BaseSX, 10GBaseSR, etc. (Basically, your speed and duplex stuff go here)
+2. Data Link <== This is where your Layer-2 Switches operate. It is point A to point B MAC address to MAC address communication. Switches are just smarter than hubs and create and maintain an ARP table such that when transmitting to an unknown client they do an ARP broadcast then populate the ARP table dynamically. A can talk to B while C talks to D withoout saturating the bandwidth or experiencing collisions. These are called FRAMES
+3. Network <== This is where Layer-3 Routing takes place. This is your source and destination IP addresses. NAT for example would edit the packets potentially changing the values in these fields. Standard Access Control Lists work here, routers receive packets and ultimately consult routing tables and pick the best destination based on administrative distance metricks. These datagrams are referred to as PACKETS.
+4. Transport <== This is where TCP, UDP, and other Transport protocols like ICMP function. Where TCP and UDP have ports, which are a 16-bit unsigned integer (i.e. 0 to 65,535). Everyone talks as if there are 65,535 ports toatal... well, thee are really 65,535 UDP ports, AND there are 65,535 TCP ports. That is that TCP port 80 is unique from UDP port 80 because they are an entirely different protocol. ICMP actually does NOT have ports but rather flags like "destination network unreachable." IT still functions at the transport layer. We use the term SEGMENTS to describe the datagrams here. Something that might make a change to a SEGMENT might be PAT (port address translation).
+5. Session
+6. Presentation
+7. Application
+
+Inner Workings:
+
+Important: The VLAN is a field of a Layer-2 Frame (just like the Source and Destination MAC addresses). FRAMES are NOT routable via layer-3 (unless of course you go way out of your way to encapsulate the frames into layer-3 packets). Each time a FRAME moves from a switch interface to another switch interface, the existing FRAME is stripped off (leaving the packet Layer-3 and higher layers within the packet i.e. 4 - 7 unchanged). The switch then re-encapsulates that packet into a new FRAME and transmits it via the appropriate interface toward another switch. Specifically each of these Layer-2 transmissions result in the the source and destination MAC addresses being re-written, and that is the basic switching process.
+
+Where VLANs come into play is each switch has completely separate memory space for each VLAN. Any given FRAME can be a member of ONLY one VLAN. There is only one field for a VLAN tag on any given FRAME. That field can be populated 1 to 4095 OR it can be left blank.
+
+
+*****************************
+
+I am going to start with terminology... Specifically Cisco's
+
+****************************
+
+Okay, Cisco uses two (2) types of interfaces (as does everyone else)... Cisco calls theirs: Trunk ports and Access ports. This is Cisco's terminology.
+
+On a Cisco device the configuration to create a VLAN instance in memory is:
+
+Switch(config)# vlan 123
+Switch(config-vlan)# name CorpNetwork
+
+In the configuration it will look like this:
+
+vlan 123
+name CorpNetwork
+!
+
+Now you can make an interface a member of a VLAN as an Access port (for connecting devices like computers, servers, printers, etc.) What is important is to recognize these devices transmit with the VLAN field blank/empty unless you go out of your way to make a change on the Ethernet adapter.
+
+To make a particular interface a member of that VLAN as an Access Port it works like this on Cisco:
+
+Switch(config)# int gig 0/1
+Switch(config-if)# switchport mode access
+Switch(config-if)# switchport access vlan 123
+
+Again, you can make a port an access port for only one (1) VLAN because there is only one type of empty null value.
+
+That is any traffic coming into GigabitEthernet0/1 without a VLAN tag will become a member of VLAN 123. Any traffic being transmitted for VLAN 123 will transmitted (without a VLAN tag) on GigabitEthernet0/23 at least with respect to ARP, and PVST+ (Per VLAN Spanning Tree).
+
+
+********************
+
+Now here is where it gets more interesting... Cisco's terminology TRUNK.
+
+A Trunk port simply receives and transmits WITH a VLAN tag. It can be a member of multiple VLANs because it can transmit frames with say VLAN 123 and VLAN 2 even though any given FRAME it transmits can belong to only one VLAN.
+
+Configuration example:
+
+Switch(config)# int gig 0/48
+Switch(config-if)# switchport mode trunk
+Switch(config-if)# switchport trunk encapsulation dot1q
+Switch(config-if)# switchport trunk allowed vlan 2,123
+
+That Ssame FRAME above that was a member of VLAN 123 would be transmitted on GigabitEthernet0/48 with respect to ARP, PVST+ etc. The difference is that should a FRAME be transmitted from VLAN 123 on this port, it WILL have the VLAN field set to 123 before being transmitted across the trunk. The receiving switch on the other side of trunk will read this VLAN number and put the frame into the appropriate VLAN memory space when received. If it then transmits it to say a server the receiving switch will surely have another access port configured within VLAN 123 whereby it will send it without a TAG to the server.
+
+
+Important Take Aways: dot1q is Cisco speak for 802.1q, and it is the industry standard. The only other choice I know of is ISL, which is proprietary Cisco, and hopefully nobody uses it even on Cisco. If they do there would be no interoperability between Cisco and Other Vendors. In contrast 802.1q is vendor agnostic. It is important to also recognize that should a FRAME arrive with no VLAN tag specified OR not be for VLAN 2 or VLAN 123, the frame will get dropped.
+
+It is important to therefore please take notice that an Access Port and a plain Trunk Port will NOT communicate with each other! 
+
+****************
+
+Now let us touch on the terminology used by many other, non-Cisco Vendors. TAGGED and UNTAGGED ports.
+
+Essentially a TAGGED port is synonymous with a TRUNK port
+.. also an UNTAGGED port is synonymous with an ACCESS port.
+
+
+Okay, so I do a TON with Brocade, which is virtually identical to HP ProCurve...
+
+Here would be the BROCADE equivalent of the above CISCO configuration:
+
+
+vlan 1 name DEFAULT-VLAN by port
+!
+vlan 2 name Something by port
+tagged ethe 1/1/48
+!
+vlan 123 CorpNetwork by port
+tagged ethe 1/1/48
+untagged ethe 1/1/1
+!
+
+**************
+NATIVE and DEFAULT VLANs
+**************
+
+What is the difference?
+
+A Default VLAN is nothing but a parking space.
+
+A Default VLAN is nothing more than the VLAN the interfaces belong to by default. Hence, if you delete a a VLAN by default the interfaces return to the default VLAN. On every device and vendor I know the default is VLAN .
+
+A NATIVE VLAN is where FRAMES in this VLAN are untagged when sent across a trunk. 
+
+They are the same as what BROCADE calls a dual-mode port. The definition is that a dual-mode port allows it to accept and transmit both tagged traffic and untagged traffic.
+
+
+Okay, so what does this mean exactly?
+
+Well, let's say you have all your traffic on your Technibble VLAN 123 as access ports:
+
+vlan 123 CorpNetwork by port
+untagged ethe 1/1/1 to 1/1/48
+!
+
+Let's instead say you want to have VOICE traffic on VLAN 500 as well as your Technibble DATA traffic on VLAN 123:
+
+vlan 123 CorpNetwork by port
+tagged ethe 1/1/1 to 1/1/48
+!
+vlan 500 Voice by port
+tagged ethe 1/1/1 to 1/1/48
+!
+
+interface ethernet 1/1/1
+dual-mode 123
+!
+...< truncated for brevity>...
+
+interface ethernet 1/1/48
+dual-mode 123
+!
+
+
+What this would do is make it such that any VoIP device such as an IP phone would talk applying a VLAN TAG of 500 to the FRAMES. This would cause that traffic to become part of VLAN 500.
+
+Now, any traffic without a tag (i.e. untagged) traffic would go into VLAN 123.
+
+
+In CISCOland, a native VLAN statement would do the same thing.
+
+
+*******************
+
+There are numerous use cases. I have used them to trunk together Wireless Access points between different floors, separate voice and data, break out areas of data centers by usage, provide management security... etc.
+
+
+Just remember they are NOT private when connected together via routing tables. Specifically, the FRAMES are stripped off at each Layer-3 Boundary at the instant in time routing happens; hence, on a Layer-3 switch you can easily communicate between the VLANs.
+
+It would be like having a separate switch for DATA and a separate switch for VOICE, yet you then route the traffic for the different, associated subnets in the same routing-table space. Suddenly, you have full communication via the devices' IPs.
+ 
+Okay, I will strongly consider making a tutorial, but I kind of feel it is getting to be depreciated with all of the Mutilayer Switches (AKA Layer-3 switches), and as I suspect very strongly as you know it is just taking a router and creating a bunch of sub-interfaces under the physical interface such that it is on a stick (i.e. connected via one physical network cable) and using dot1q just like this tutorial above to trunk a bunch of Vlans from a Layer-2 switch into the router over a single cable. From then on it is just a bunch of Layer-3 router stuff that is no different than if you connected each VLAN via its own physical network cable to the router on individual physical interfaces other than the fact you configure the sub interfaces instead of physical interfaces. Regardless on a stick or not, you would put IP addresses on some "interfaces" and this automatically you would instantiate directly-connected networks within the default routing instance (default VRF) merely by virtue of assigning IPs and masks. That said, this day and age, it is generally easier to get a Multi-Layer switch, enable the "IP Routing" feature set and just create the SVIs directly on the switch "i.e. interface vlan ####."
+
+On a Layer-3 or MultiLayer switch, it would show the subnet reachable via whatever Vlan it is on within the switch when you use an SVI. Of course you could use another subnet or other a physical interface instead of an SVI as well.
+
+
+On a MultiLayer switch, it would look something like this:
+
+
+switch# sh ip route
+
+Codes: C - connected, S - static, I - IGRP, R - RIP, M - mobile, B - BGP
+D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area
+N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+E1 - OSPF external type 1, E2 - OSPF external type 2, E - EGP
+i - IS-IS, L1 - IS-IS level-1, L2 - IS-IS level-2, ia - IS-IS inter area
+* - candidate default, U - per-user static route, o - ODR
+P - periodic downloaded static route
+
+Gateway of last resort is not set
+
+10.0.0.0/16 is subnetted, 1 subnets
+C 10.2.0.0 is directly connected, Vlan200
+
+
+******************
+Someone above asked about special DHCP options to configure Voice VLANS.
+
+What I often use is LLDP-MED (Link-Layer-Discovery-Protocol Media-EndPoint-Detection). What it does is use LLDP to announce the Voice VLAN:
+
+On Brocade:
+
+lldp med network-policy application voice tagged vlan 500 priority 5 dscp 46 ports ethe 1/1/1 to 1/1/48
+
+SSH@SOMESWITCH# sh lldp local-info ports e 1/1/3
+
+Local port: 1/1/3
++ Chassis ID (MAC address): 609c.9fea.1234
++ Port ID (MAC address): 609c.9fea.1234
++ Time to live: 120 seconds
++ System name : "SOMECOUMPUTER"
++ Port description : "GigabitEthernet1/1/3"
++ System capabilities : bridge
+Enabled capabilities: bridge
++ 802.3 MAC/PHY : auto-negotiation enabled
+Advertised capabilities: 10BaseT-HD, 10BaseT-FD, 100BaseTX-HD,
+100BaseTX-FD, fdxSPause, fdxBPause, 1000BaseT-HD,
+1000BaseT-FD
+Operational MAU type : 1000BaseT-FD
++ 802.3 Power via MDI: PSE port, power enabled, class 1
+Power Pair : A (not controllable)
+Power Type : Type 2 PSE device
+Power Source : Unknown Power Source
+Power Priority : Low (3)
+Power Requested: 3.9 watts (PSE equivalent: 4009 mWatts)
+Power Allocated: 3.9 watts (PSE equivalent: 4009 mWatts)
++ Link aggregation: not capable
++ Maximum frame size: 1522 octets
++ MED capabilities: capabilities, networkPolicy, location, extendedPSE
+MED device type : Network Connectivity
++ MED Network Policy
+Application Type : Voice
+Policy Flags : Known Policy, Tagged
+VLAN ID : 500
+L2 Priority : 5
+DSCP Value : 46
++ MED Extended Power via MDI
+Power Type : PSE device
+Power Source : Unknown Power Source
+Power Priority : Low (3)
+Power Value : 3.9 watts (PSE equivalent: 4009 mWatts)
++ Port VLAN ID: 213
++ Management address (IPv4): 10.1.2.3
+
+**********************
+
+Cisco How to Announce a Voice VLAN via CDP and LLDP:
+
+vlan 123
+name Technibble Data
+exit
+
+vlan 500
+name Technibble Voice
+exit
+
+interface range GigabitEtherent 1/0/1 - 48
+switchport mode access
+switchport access vlan 123
+switchport voice vlan 500
+exit
+
+
+
+Okay the Access VLAN is Untagged with a blank 802.1q field. It is expecting the attached phones to TAG vlan 500 to each frame (Layer-2). Ordinarily, tagged frames go into a trunk and the untagged frames go into the native VLAN. The difference here is that the switchport voice vlan causes an announcement. 
+ 
+Awesome... it is important to realize it happens at Layer-2 here (image source is Wikipedia):
+ 
+
+
+Only 12-bits of that field is for the actual VLAN tag hence you can create only up to vlan 4095 even though WikiPedia says 4094 vlans, lol!
+
+I found a switch with 4095...
+
+#sh vlan br
+
+System-max vlan Params: Max(4095) Default(64) Current(64)
+Default vlan Id :4095
+Total Number of Vlan Configured :3
+VLANs Configured :1 200 4095
+
+
+It's a 12-bit field within the 32 bits of the 802.1Q header. The irony is the PCP portion is what I ALWAYS refer to as the CoS or Class-of-Service bits; since, that is the area you configure in the configuration. These are layer-2 Priority bits.
+
+
+WikiPedia explains that very well.
+https://en.wikipedia.org/wiki/IEEE_802.1Q
+
+
+Double-Tagging is always interesting... it's a good read. I always referred to it as Q-in-Q. There are cTAGs and sTAGs for Customer and Service Provider VLANS.'
+
+
+To prevent VLAN hopping attacks, this is very important:
+
+https://www.cisco.com/c/m/en_us/techdoc/dc/reference/cli/nxos/commands/l2/vlan-dot1q-tag-native.html 
+ 
+Reactions: tasonis and Markverhyden 
+
